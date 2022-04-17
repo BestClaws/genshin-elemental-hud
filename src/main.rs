@@ -5,9 +5,9 @@ use std::{time::{Instant, Duration}, vec, iter::Inspect};
 use device_query::{DeviceState, Keycode, DeviceQuery};
 use eframe::{
     egui::{self, Frame, TextFormat},
-    epi, epaint::{Pos2, Color32},
+    epi, epaint::{Pos2, Color32}, emath::Align2,
 };
-// use egui_extras::image::RetainedImage;
+use egui_extras::image::RetainedImage;
 use egui::text::LayoutJob;
 
 struct MyEguiApp {
@@ -16,6 +16,10 @@ struct MyEguiApp {
     last_used: Vec<Instant>,
     active_chara: usize,
     show: bool,
+
+    logo: RetainedImage,
+
+
 }
 
 impl Default for MyEguiApp {
@@ -26,6 +30,7 @@ impl Default for MyEguiApp {
             last_used: vec![Instant::now(),Instant::now(),Instant::now(),Instant::now(),],
             active_chara: 0,
             show: true,
+            logo: RetainedImage::from_image_bytes("logo", include_bytes!("../logo.png")).unwrap()
         }
     }
 }
@@ -70,11 +75,11 @@ impl epi::App for MyEguiApp {
        
    
 
-
-        let mut next_use_in_for_1 = (self.cooldowns[0].as_secs().saturating_sub(now.duration_since(self.last_used[0]).as_secs())).to_string();
-        let mut next_use_in_for_2 = (self.cooldowns[1].as_secs().saturating_sub(now.duration_since(self.last_used[1]).as_secs())).to_string();
-        let mut next_use_in_for_3 = (self.cooldowns[2].as_secs().saturating_sub(now.duration_since(self.last_used[2]).as_secs())).to_string();
-        let mut next_use_in_for_4 = (self.cooldowns[3].as_secs().saturating_sub(now.duration_since(self.last_used[3]).as_secs())).to_string();
+        // find time remaining
+        let ready_in_1 = (self.cooldowns[0].as_secs().saturating_sub(now.duration_since(self.last_used[0]).as_secs())).to_string();
+        let ready_in_2 = (self.cooldowns[1].as_secs().saturating_sub(now.duration_since(self.last_used[1]).as_secs())).to_string();
+        let ready_in_3 = (self.cooldowns[2].as_secs().saturating_sub(now.duration_since(self.last_used[2]).as_secs())).to_string();
+        let ready_in_4 = (self.cooldowns[3].as_secs().saturating_sub(now.duration_since(self.last_used[3]).as_secs())).to_string();
       
 
 
@@ -102,13 +107,17 @@ impl epi::App for MyEguiApp {
 
    
 
-                    ui.label(get_layout_job(next_use_in_for_1));
-                    ui.add_space(20.0);
-                    ui.label(get_layout_job(next_use_in_for_2));
-                    ui.add_space(20.0);
-                    ui.label(get_layout_job(next_use_in_for_3));
-                    ui.add_space(20.0);
-                    ui.label(get_layout_job(next_use_in_for_4));
+                    let image = egui::Image::new(self.logo.texture_id(ctx), self.logo.size_vec2());
+                    indicator(ui, String::from(ready_in_1), image);
+                    ui.add_space(15.0);
+                    let image = egui::Image::new(self.logo.texture_id(ctx), self.logo.size_vec2());
+                    indicator(ui, String::from(ready_in_2), image);
+                    ui.add_space(15.0);
+                    let image = egui::Image::new(self.logo.texture_id(ctx), self.logo.size_vec2());
+                    indicator(ui, String::from(ready_in_3), image);
+                    ui.add_space(15.0);
+                    let image = egui::Image::new(self.logo.texture_id(ctx), self.logo.size_vec2());
+                    indicator(ui, String::from(ready_in_4), image);
                 });
 
 
@@ -154,4 +163,33 @@ fn main() {
 
     
     
+}
+
+
+pub fn indicator(ui: &mut egui::Ui, text: String, image: egui::Image) -> egui::Response {
+
+    let desired_size =   egui::vec2(20.0, 20.0);
+
+
+    let (rect, mut response) = ui.allocate_exact_size(desired_size, egui::Sense::click());
+
+
+    if ui.is_rect_visible(rect) {
+
+
+
+        let visuals = ui.style().noninteractive();
+        // All coordinates are in absolute screen coordinates so we use `rect` to place the elements.
+        let rect = rect.expand(visuals.expansion);
+        let center = egui::pos2(rect.center().x, rect.center().y);
+        
+        image.paint_at(ui, rect);
+        ui.painter().circle_filled(center, 12.0, Color32::from_rgba_premultiplied(0,0,0,200));
+        ui.painter().text(center, Align2::CENTER_CENTER, text, eframe::epaint::FontId { size: 12.0, family: eframe::epaint::FontFamily::Proportional }, Color32::WHITE);
+   
+    }
+
+    // All done! Return the interaction response so the user can check what happened
+    // (hovered, clicked, ...) and maybe show a tooltip:
+    response
 }
