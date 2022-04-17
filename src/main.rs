@@ -1,5 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
+mod arc;
+
 use std::{
     iter::Inspect,
     time::{Duration, Instant},
@@ -91,22 +93,23 @@ impl epi::App for MyEguiApp {
         }
 
         // find time remaining
-        let ready_in_1 = (self.cooldowns[0]
-            .as_secs()
-            .saturating_sub(now.duration_since(self.last_used[0]).as_secs()))
-            .to_string();
-        let ready_in_2 = (self.cooldowns[1]
-            .as_secs()
-            .saturating_sub(now.duration_since(self.last_used[1]).as_secs()))
-            .to_string();
-        let ready_in_3 = (self.cooldowns[2]
-            .as_secs()
-            .saturating_sub(now.duration_since(self.last_used[2]).as_secs()))
-            .to_string();
-            let ready_in_4 = (self.cooldowns[3]
-            .as_secs()
-            .saturating_sub(now.duration_since(self.last_used[3]).as_secs()))
-        .to_string();
+        let mut ready_in = vec![];
+        for i in 0..4 {
+            ready_in.push(self.cooldowns[i]
+            .as_millis()
+            .saturating_sub(now.duration_since(self.last_used[i]).as_millis()));
+        }
+
+
+        let mut completion_ratio = vec![];
+        for i in 0..4 {
+            completion_ratio.push(ready_in[i] as f32 / self.cooldowns[i].as_millis() as f32);
+            
+        }
+
+        
+  
+
 
         egui::CentralPanel::default()
             .frame(Frame {
@@ -128,26 +131,19 @@ impl epi::App for MyEguiApp {
                     ctx.set_pixels_per_point(2.3);
 
                     let image = egui::Image::new(self.logo.texture_id(ctx), self.logo.size_vec2());
-                    indicator(ui, String::from(ready_in_1), image);
-                    ui.add_space(14.0);
-                    let image = egui::Image::new(self.logo.texture_id(ctx), self.logo.size_vec2());
-                    indicator(ui, String::from(ready_in_2), image);
-                    ui.add_space(14.0);
-                    let image = egui::Image::new(self.logo.texture_id(ctx), self.logo.size_vec2());
-                    indicator(ui, String::from(ready_in_3), image);
-                    ui.add_space(14.0);
-                    let image = egui::Image::new(self.logo.texture_id(ctx), self.logo.size_vec2());
-                    indicator(ui, String::from(ready_in_4), image);
+
+       
+                    for i in 0..4 {
+                        indicator(ui, ready_in[i], completion_ratio[i], image);
+                        ui.add_space(14.0);
+                    }
+
                 });
             });
+
+            
     }
 }
-
-
-
-
-
-
 
 fn main() {
     let app = MyEguiApp::default();
@@ -165,16 +161,16 @@ fn main() {
     eframe::run_native(Box::new(app), native_options);
 }
 
-pub fn indicator(ui: &mut egui::Ui, mut text: String, image: egui::Image) -> egui::Response {
+pub fn indicator(ui: &mut egui::Ui, ready_in: u128, comp_ratio: f32, image: egui::Image) -> egui::Response {
 
     // the tint color of e skill logo
-    let mut img_tint = Color32::from_rgba_premultiplied(50, 50, 50, 50);
+    let mut img_tint = Color32::from_rgba_unmultiplied(255, 255, 255, 30);
+    let mut text = format!("{:.1}", (ready_in as f32 / 1000.0));
 
-    if text.eq("0") {
+    if ready_in == 0 {
         img_tint = Color32::WHITE;
         text = String::from("");
     }
-
 
     let desired_size = egui::vec2(25.0, 25.0);
 
@@ -186,20 +182,24 @@ pub fn indicator(ui: &mut egui::Ui, mut text: String, image: egui::Image) -> egu
         let rect = rect.expand(visuals.expansion);
         let center = egui::pos2(rect.center().x, rect.center().y);
 
-        
-
         let image = image.tint(img_tint);
         image.paint_at(
             ui,
             eframe::epaint::Rect {
-                min: Pos2 { x: rect.min.x + 5.0, y: rect.min.y + 5.0},
-                max: Pos2 { x: rect.max.x - 5.0, y: rect.max.y - 5.0},
+                min: Pos2 {
+                    x: rect.min.x + 5.0,
+                    y: rect.min.y + 5.0,
+                },
+                max: Pos2 {
+                    x: rect.max.x - 5.0,
+                    y: rect.max.y - 5.0,
+                },
             },
         );
         ui.painter().circle_filled(
             center,
             rect.height() / 2.0,
-            Color32::from_rgba_premultiplied(0, 0, 0, 30),
+            Color32::from_rgba_unmultiplied(0, 0, 0, 50),
         );
 
         ui.painter().text(
@@ -207,13 +207,22 @@ pub fn indicator(ui: &mut egui::Ui, mut text: String, image: egui::Image) -> egu
             Align2::CENTER_CENTER,
             text.clone(),
             eframe::epaint::FontId {
-                size: 10.0,
+                size: 9.0,
                 family: eframe::epaint::FontFamily::Proportional,
             },
             Color32::WHITE,
         );
 
- 
+        if ready_in != 0 {
+            let mut shapes = vec![];
+            use egui::{containers::*, *};
+            let points = arc::get_points(center, rect.height() / 2.0 - 2.0, 90.0, comp_ratio * 360.0, 50);
+            shapes.push(egui::epaint::Shape::line(
+                points,
+                Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 30)),
+            ));
+            ui.painter().extend(shapes);
+        }
     }
 
     // All done! Return the interaction response so the user can check what happened
