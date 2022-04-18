@@ -11,3 +11,6 @@ egui_extras = {version="*", features=["image"]}
 image = {version = "*", features = ["png"]}
 device_query="1.1.0"
 lyon_geom="*"
+serde="*"
+serde_yaml="*"
+serde_derive="*"

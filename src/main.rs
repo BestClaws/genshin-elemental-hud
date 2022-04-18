@@ -1,152 +1,21 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
 mod arc;
+mod loading;
+mod cooldown;
 
 use std::{
-    iter::Inspect,
+    collections::HashMap,
     time::{Duration, Instant},
-    vec,
 };
-
-use device_query::{DeviceQuery, DeviceState, Keycode};
-use eframe::{
-    egui::{self, Frame, TextFormat},
-    emath::Align2,
-    epaint::{Color32, Pos2},
-    epi,
-};
-use egui::text::LayoutJob;
-use egui_extras::image::RetainedImage;
-
-struct MyEguiApp {
-    device_state: DeviceState,
-    cooldowns: Vec<Duration>,
-    last_used: Vec<Instant>,
-    active_chara: usize,
-    show: bool,
-
-    logo: RetainedImage,
-}
-
-impl Default for MyEguiApp {
-    fn default() -> Self {
-        Self {
-            device_state: DeviceState::new(),
-            cooldowns: vec![
-                Duration::from_secs(6),
-                Duration::from_secs(4),
-                Duration::from_secs(16),
-                Duration::from_secs(21),
-            ],
-            last_used: vec![
-                Instant::now(),
-                Instant::now(),
-                Instant::now(),
-                Instant::now(),
-            ],
-            active_chara: 0,
-            show: true,
-            logo: RetainedImage::from_image_bytes("logo", include_bytes!("../logo.png")).unwrap(),
-        }
-    }
-}
-
-impl epi::App for MyEguiApp {
-    fn name(&self) -> &str {
-        "E-Status"
-    }
-
-    fn clear_color(&self) -> egui::Rgba {
-        egui::Rgba::TRANSPARENT // Make sure we don't paint anything behind the rounded corners
-    }
-
-    fn update(&mut self, ctx: &egui::Context, frame: &epi::Frame) {
-        // check keyinputs
-
-        let keys: Vec<Keycode> = self.device_state.get_keys();
-
-        let now = Instant::now();
-
-        let first_down = keys.contains(&Keycode::Key1);
-        let second_down = keys.contains(&Keycode::Key2);
-        let third_down = keys.contains(&Keycode::Key3);
-        let fourth_down = keys.contains(&Keycode::Key4);
-
-        if first_down {
-            self.active_chara = 0;
-        }
-        if second_down {
-            self.active_chara = 1;
-        }
-        if third_down {
-            self.active_chara = 2;
-        }
-        if fourth_down {
-            self.active_chara = 3;
-        }
-
-        let e_down = keys.contains(&Keycode::E);
-
-        if e_down {
-            self.last_used[self.active_chara] = now;
-            println!("received event");
-        }
-
-        // find time remaining
-        let mut ready_in = vec![];
-        for i in 0..4 {
-            ready_in.push(self.cooldowns[i]
-            .as_millis()
-            .saturating_sub(now.duration_since(self.last_used[i]).as_millis()));
-        }
-
-
-        let mut completion_ratio = vec![];
-        for i in 0..4 {
-            completion_ratio.push(ready_in[i] as f32 / self.cooldowns[i].as_millis() as f32);
-            
-        }
-
-        
-  
-
-
-        egui::CentralPanel::default()
-            .frame(Frame {
-                fill: Color32::TRANSPARENT,
-                ..Default::default()
-            })
-            .show(ctx, |ui| {
-                if keys.contains(&Keycode::F12) {
-                    self.show = false;
-                } else if keys.contains(&Keycode::F11) {
-                    self.show = true;
-                }
-
-                ui.set_visible(self.show);
-
-                // let rimg =
-                //     RetainedImage::from_image_bytes("img1", include_bytes!("img1.png")).unwrap();
-                ui.vertical(|ui| {
-                    ctx.set_pixels_per_point(2.3);
-
-                    let image = egui::Image::new(self.logo.texture_id(ctx), self.logo.size_vec2());
-
-       
-                    for i in 0..4 {
-                        indicator(ui, ready_in[i], completion_ratio[i], image);
-                        ui.add_space(14.0);
-                    }
-
-                });
-            });
-
-            
-    }
-}
 
 fn main() {
-    let app = MyEguiApp::default();
+    let party = loading::load_party();
+    let data = loading::load_data();
+
+    let mut app = EStatusApp::new(data, party);
+    app.setup();
+
     let native_options = eframe::NativeOptions {
         transparent: true,
         initial_window_size: Some(egui::Vec2 { x: 80.0, y: 300.0 }),
@@ -158,11 +27,194 @@ fn main() {
         }),
         ..Default::default()
     };
+
     eframe::run_native(Box::new(app), native_options);
 }
 
-pub fn indicator(ui: &mut egui::Ui, ready_in: u128, comp_ratio: f32, image: egui::Image) -> egui::Response {
+use cooldown::CoolDown;
+use device_query::{DeviceQuery, DeviceState, Keycode};
+use eframe::{
+    egui::{self, Frame},
+    emath::Align2,
+    epaint::{Color32, Pos2, Stroke},
+    epi,
+};
 
+use egui_extras::image::{RetainedImage};
+
+struct EStatusApp {
+    data:Vec<(String, String, HashMap<u8, u8>)>,
+    party: Vec<String>,
+    device_state: DeviceState,
+    cooldowns: HashMap<String, CoolDown>,
+    active_chara: usize,
+    show: bool,
+    eskill_images: HashMap<String, RetainedImage>,
+    e_down_at: Option<Duration>,
+}
+
+impl EStatusApp {
+    fn new(data: Vec<(String, String, HashMap<u8, u8>)>, party:Vec<String>) -> Self {
+        Self {
+            data,
+            party,
+            device_state: DeviceState::new(),
+            active_chara: 0,
+            show: true,
+            cooldowns: HashMap::new(),
+            eskill_images: HashMap::new(),
+            e_down_at: None,
+            
+        }
+    }
+
+
+    fn setup(&mut self) {
+        self.load_eskill_images();
+        self.load_cooldowns();
+    
+    }
+
+
+
+    fn load_eskill_images(&mut self) {
+        for chara in &self.party {
+            let ret_img = loading::retain_image(&format!("assets/{}.png", chara));
+            self.eskill_images.insert(chara.to_string(), ret_img);
+        }
+
+
+    }
+
+    fn load_cooldowns(&mut self) {
+        for chara in &self.party {
+            let mut cd = CoolDown::default();
+            // find chara info in data
+            for dat_triplet in &self.data {
+                if dat_triplet.0.eq(chara) {
+                    for (k, v) in &dat_triplet.2 {
+                        let v = Duration::from_secs(*v as u64);
+                        cd.available.insert(*k, v);
+                    }   
+                }
+
+            }
+            self.cooldowns.insert(chara.to_owned(), cd);
+        }
+    }
+
+}
+
+impl epi::App for EStatusApp {
+    fn name(&self) -> &str {
+        "E-Status"
+    }
+
+    fn clear_color(&self) -> egui::Rgba {
+        // Make sure we don't paint outside of egui window
+        egui::Rgba::TRANSPARENT
+    }
+
+
+
+
+    fn update(&mut self, ctx: &egui::Context, _frame: &epi::Frame) {
+
+        let now = Instant::now();
+
+        // check key presses
+        let pressed_keys: Vec<Keycode> = self.device_state.get_keys();
+
+  
+
+        let first_down = pressed_keys.contains(&Keycode::Key1);
+        let second_down = pressed_keys.contains(&Keycode::Key2);
+        let third_down = pressed_keys.contains(&Keycode::Key3);
+        let fourth_down = pressed_keys.contains(&Keycode::Key4);
+
+        let party_size = self.party.len();
+
+        if first_down && party_size > 0 {
+            self.active_chara = 0;
+        }
+        if second_down && party_size > 1{
+
+            self.active_chara = 1;
+        }
+        if third_down && party_size > 2 {
+            self.active_chara = 2;
+        }
+        if fourth_down && party_size > 3{
+            self.active_chara = 3;
+        }
+
+     
+        // last_used = now, results in cd timer set to max
+        if pressed_keys.contains(&Keycode::E) {
+            let chara = &mut self.party[self.active_chara];
+            let mut cd = self.cooldowns.get_mut(chara).unwrap();
+            cd.last_used = now;
+        }
+
+        // find ready_in and completion ratio
+
+        for i in 0..party_size {
+            
+            let chara = &mut self.party[i];
+            let mut cd = self.cooldowns.get_mut(chara).unwrap();
+            let current_cd = cd.current;
+            let available_cds = &cd.available;
+
+            let current_cd = available_cds.get(&current_cd).unwrap();
+
+            cd.ready_in = current_cd.as_millis()
+                    .saturating_sub(now.duration_since(cd.last_used).as_millis());
+       
+
+            cd.completion_ratio = cd.ready_in as f32 / current_cd.as_millis() as f32;
+        }
+
+        egui::CentralPanel::default()
+            .frame(Frame {
+                fill: Color32::TRANSPARENT,
+                ..Default::default()
+            })
+            .show(ctx, |ui| {
+
+                // hide show HUD
+                if pressed_keys.contains(&Keycode::F12) {
+                    self.show = false;
+                } else if pressed_keys.contains(&Keycode::F11) {
+                    self.show = true;
+                }
+                ui.set_visible(self.show);
+
+                // HUD UI
+                ui.vertical(|ui| {
+                    ctx.set_pixels_per_point(2.3);
+                    for i in 0..party_size {
+
+
+                        let chara = &mut self.party[i];
+                        let cd = self.cooldowns.get_mut(chara).unwrap();
+
+                        let image = self.eskill_images.get(&self.party[i]).unwrap();
+                        let image = egui::Image::new(image.texture_id(ctx), image.size_vec2());
+
+                        indicator(ui, cd.ready_in, cd.completion_ratio, image);
+                        ui.add_space(14.0);
+                    }
+                });
+            });
+    }
+}
+
+pub fn indicator(
+    ui: &mut egui::Ui,
+    ready_in: u128,
+    comp_ratio: f32,
+    image: egui::Image,
+) -> egui::Response {
     // the tint color of e skill logo
     let mut img_tint = Color32::from_rgba_unmultiplied(255, 255, 255, 30);
     let mut text = format!("{:.1}", (ready_in as f32 / 1000.0));
@@ -174,7 +226,7 @@ pub fn indicator(ui: &mut egui::Ui, ready_in: u128, comp_ratio: f32, image: egui
 
     let desired_size = egui::vec2(25.0, 25.0);
 
-    let (rect, mut response) = ui.allocate_exact_size(desired_size, egui::Sense::click());
+    let (rect, response) = ui.allocate_exact_size(desired_size, egui::Sense::click());
 
     if ui.is_rect_visible(rect) {
         let visuals = ui.style().noninteractive();
@@ -215,8 +267,13 @@ pub fn indicator(ui: &mut egui::Ui, ready_in: u128, comp_ratio: f32, image: egui
 
         if ready_in != 0 {
             let mut shapes = vec![];
-            use egui::{containers::*, *};
-            let points = arc::get_points(center, rect.height() / 2.0 - 2.0, 90.0, comp_ratio * 360.0, 50);
+            let points = arc::get_points(
+                center,
+                rect.height() / 2.0 - 2.0,
+                90.0,
+                comp_ratio * 360.0,
+                50,
+            );
             shapes.push(egui::epaint::Shape::line(
                 points,
                 Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 30)),
@@ -229,3 +286,5 @@ pub fn indicator(ui: &mut egui::Ui, ready_in: u128, comp_ratio: f32, image: egui
     // (hovered, clicked, ...) and maybe show a tooltip:
     response
 }
+
+

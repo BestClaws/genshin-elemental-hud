@@ -1,0 +1,18 @@
+- - bennett
+  - bennett.png
+  - 0: 5 # STANDARD TAP
+    1: 7 # STANDARD HOLD
+    3: 10 # ADDITIONAL 
+- - venti
+  - venti.png
+  - 0: 5
+    2: 15
+- - hu tao
+  - hu tao.png
+  - 0: 16
+- - zhongli
+  - zhongli.png
+  - 0: 4
+- - xingqiu
+  - xingqiu
+  - 0: 21
