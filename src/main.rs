@@ -6,7 +6,7 @@ mod cooldown;
 
 use std::{
     collections::HashMap,
-    time::{Duration, Instant},
+    time::{Duration, Instant}, hash::Hash,
 };
 
 fn main() {
@@ -50,7 +50,7 @@ struct EStatusApp {
     active_chara: usize,
     show: bool,
     eskill_images: HashMap<String, RetainedImage>,
-    e_down_at: Option<Duration>,
+    e_down_at: Option<Instant>,
 }
 
 impl EStatusApp {
@@ -150,9 +150,36 @@ impl epi::App for EStatusApp {
 
      
         // last_used = now, results in cd timer set to max
-        if pressed_keys.contains(&Keycode::E) {
+        if pressed_keys.contains(&Keycode::E) && self.e_down_at == None {
+            self.e_down_at = Some(now);
+        }
+
+        if !pressed_keys.contains(&Keycode::E) && self.e_down_at != None {
+
+            let e_held_for = now - self.e_down_at.unwrap();
+            let e_held_for = e_held_for.as_secs();
+            self.e_down_at = None;
+
+            println!("e held for: {}", e_held_for);
+
+        
             let chara = &mut self.party[self.active_chara];
             let mut cd = self.cooldowns.get_mut(chara).unwrap();
+
+
+
+            let mut hold_variants: Vec<u8> = cd.available.keys().cloned().collect();
+            hold_variants.sort();
+            hold_variants.reverse();
+
+            for variant in hold_variants {
+                if e_held_for >= variant as u64  {
+                    cd.current = variant;
+                }
+            }
+
+
+
             cd.last_used = now;
         }
 
