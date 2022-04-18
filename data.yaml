@@ -1,18 +1,21 @@
 - - bennett
   - bennett.png
   - 0: 5 # STANDARD TAP
-    1: 7 # STANDARD HOLD
-    3: 10 # ADDITIONAL 
+    500: 7 # STANDARD HOLD
+    1000: 10 # ADDITIONAL 
 - - venti
   - venti.png
   - 0: 5
-    2: 15
+    500: 15
 - - hu tao
   - hu tao.png
   - 0: 16
 - - zhongli
   - zhongli.png
   - 0: 4
+    500: 12
 - - xingqiu
   - xingqiu
   - 0: 21
+
+  # todo start delay  field for some skills

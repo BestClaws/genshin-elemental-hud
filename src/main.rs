@@ -43,7 +43,7 @@ use eframe::{
 use egui_extras::image::{RetainedImage};
 
 struct EStatusApp {
-    data:Vec<(String, String, HashMap<u8, u8>)>,
+    data:Vec<(String, String, HashMap<u32, u32>)>,
     party: Vec<String>,
     device_state: DeviceState,
     cooldowns: HashMap<String, CoolDown>,
@@ -54,7 +54,7 @@ struct EStatusApp {
 }
 
 impl EStatusApp {
-    fn new(data: Vec<(String, String, HashMap<u8, u8>)>, party:Vec<String>) -> Self {
+    fn new(data: Vec<(String, String, HashMap<u32, u32>)>, party:Vec<String>) -> Self {
         Self {
             data,
             party,
@@ -157,7 +157,7 @@ impl epi::App for EStatusApp {
         if !pressed_keys.contains(&Keycode::E) && self.e_down_at != None {
 
             let e_held_for = now - self.e_down_at.unwrap();
-            let e_held_for = e_held_for.as_secs();
+            let e_held_for = e_held_for.as_millis();
             self.e_down_at = None;
 
             println!("e held for: {}", e_held_for);
@@ -168,13 +168,16 @@ impl epi::App for EStatusApp {
 
 
 
-            let mut hold_variants: Vec<u8> = cd.available.keys().cloned().collect();
+            let mut hold_variants: Vec<u32> = cd.available.keys().cloned().collect();
             hold_variants.sort();
             hold_variants.reverse();
 
             for variant in hold_variants {
-                if e_held_for >= variant as u64  {
+                println!("e_held_for {}ms  variant {}ms", e_held_for, variant);
+                if e_held_for  >= variant as u128  { 
                     cd.current = variant;
+                    println!("done choosing..");
+                    break;
                 }
             }
 
@@ -244,10 +247,13 @@ pub fn indicator(
 ) -> egui::Response {
     // the tint color of e skill logo
     let mut img_tint = Color32::from_rgba_unmultiplied(255, 255, 255, 30);
+    let mut circle_tint = Color32::from_rgba_unmultiplied(0, 0, 0, 50);
     let mut text = format!("{:.1}", (ready_in as f32 / 1000.0));
 
     if ready_in == 0 {
+        // img_tint = Color32::from_rgba_unmultiplied(255, 255, 255, 200);
         img_tint = Color32::WHITE;
+        circle_tint = Color32::from_rgba_unmultiplied(85, 255, 0, 10);
         text = String::from("");
     }
 
@@ -262,6 +268,11 @@ pub fn indicator(
         let center = egui::pos2(rect.center().x, rect.center().y);
 
         let image = image.tint(img_tint);
+         ui.painter().circle_filled(
+            center,
+            rect.height() / 2.0,
+            circle_tint,
+        );
         image.paint_at(
             ui,
             eframe::epaint::Rect {
@@ -275,11 +286,11 @@ pub fn indicator(
                 },
             },
         );
-        ui.painter().circle_filled(
-            center,
-            rect.height() / 2.0,
-            Color32::from_rgba_unmultiplied(0, 0, 0, 50),
-        );
+        // ui.painter().circle_filled(
+        //     center,
+        //     rect.height() / 2.0,
+        //     circle_tint,
+        // );
 
         ui.painter().text(
             center,
@@ -292,11 +303,13 @@ pub fn indicator(
             Color32::WHITE,
         );
 
+
+        // cooldown ring
         if ready_in != 0 {
             let mut shapes = vec![];
             let points = arc::get_points(
                 center,
-                rect.height() / 2.0 - 2.0,
+                rect.height() / 2.0 - 1.0,
                 90.0,
                 comp_ratio * 360.0,
                 50,
@@ -304,6 +317,20 @@ pub fn indicator(
             shapes.push(egui::epaint::Shape::line(
                 points,
                 Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 30)),
+            ));
+            ui.painter().extend(shapes);
+        } else { // acive ring
+            let mut shapes = vec![];
+            let points = arc::get_points(
+                center,
+                rect.height() / 2.0 - 1.0,
+                90.0,
+                365.0,
+                50,
+            );
+            shapes.push(egui::epaint::Shape::line(
+                points,
+                Stroke::new(1.0, Color32::from_rgba_unmultiplied(85, 255, 0, 30)),
             ));
             ui.painter().extend(shapes);
         }

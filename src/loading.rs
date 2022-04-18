@@ -17,9 +17,9 @@ pub fn load_party() -> Vec<String> {
     d
 }
 
-pub fn load_data() -> Vec<(String, String, HashMap<u8, u8>)> {
+pub fn load_data() -> Vec<(String, String, HashMap<u32, u32>)> {
     let f = std::fs::File::open("data.yaml").unwrap();
-    let d: Vec<(String, String, HashMap<u8, u8>)>;
+    let d: Vec<(String, String, HashMap<u32, u32>)>;
     d = serde_yaml::from_reader(f).unwrap();
     println!("Read YAML string: {:#?}", d);
     d
