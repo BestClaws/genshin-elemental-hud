@@ -12,6 +12,7 @@ Adds a mini HUD to the game to show Elemental Skill CD for all party members
 * party reload
 
 #### Needs Fixing
+* don't show HUD icon in taskbar , show in taskbar tray instead
 * HUD is not transparent for mouse input
 * hide HUD when opening map, game menu etc.,
 * Childe dynamic cooldown
