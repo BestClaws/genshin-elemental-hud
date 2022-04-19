@@ -9,7 +9,7 @@ Adds a mini HUD to the game to show Elemental Skill CD for all party members
 ## Features
 
 #### Working On
-* party reload
+* edit party without restarting app
 
 #### Needs Fixing
 * don't show HUD icon in taskbar , show in taskbar tray instead
